@@ -1,0 +1,347 @@
+import numpy as np
+import pandas as pd
+import seaborn as sb
+import copy
+import matplotlib.pyplot as plt
+import os
+from sklearn.model_selection import train_test_split
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import accuracy_score
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.svm import LinearSVC
+from sklearn.linear_model import Perceptron
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.ensemble import AdaBoostClassifier
+
+for directory, _, filenames in os.walk('C:/Users/horat/Desktop/Project'):
+    for filename in filenames:
+        print(os.path.join(directory, filename))
+
+# read data set
+train = pd.read_csv('C:/Users/horat/Desktop/Project/train.csv')
+test = pd.read_csv('C:/Users/horat/Desktop/Project/test.csv')
+print(train)
+print(train.dropna(axis=0))  # train after delete all null
+
+# deep copy new dataset
+train_new = copy.deepcopy(train.dropna(axis=0))
+print(train_new.head())
+
+# data viz
+# class vs. survived
+pclassSum = train_new.groupby('Pclass').Survived.sum()
+plt.bar(pclassSum.index, pclassSum)
+plt.xlabel('pclass')
+plt.ylabel('Survived')
+plt.show()
+
+# sex vs. survived
+sexSum = train_new.groupby('Sex').Survived.sum()
+plt.bar(sexSum.index, sexSum)
+plt.xlabel('Sex')
+plt.ylabel('Survived')
+plt.show()
+
+# sibling/spouse vs. survived
+sibspSum = train_new.groupby('SibSp').Survived.sum()
+plt.bar(sibspSum.index, sibspSum)
+plt.xlabel('Sibsp')
+plt.ylabel('Survived')
+plt.show()
+
+# parents/children vs. survived
+parchSum = train_new.groupby('Parch').Survived.sum()
+plt.bar(parchSum.index, parchSum)
+plt.xlabel('Parch')
+plt.ylabel('Survived')
+plt.show()
+
+# port of embarkation vs. survived
+embarkedSum = train_new.groupby('Embarked').Survived.sum()
+plt.bar(embarkedSum.index, embarkedSum)
+plt.xlabel('Embarked')
+plt.ylabel('Survived')
+plt.show()
+
+# age vs. survived by scatter plot
+sb.scatterplot(x='Age',
+               y='Survived',
+               hue='Survived',  # Grouping variable that will produce points with different colors
+               style='Survived',  # Grouping variable that will produce points with different markers
+               data=train_new)
+plt.show()
+
+# fare vs. survived by scatter plot
+sb.scatterplot(x='Fare',
+               y='Survived',
+               hue='Survived',
+               style='Survived',
+               data=train_new)
+plt.show()
+
+# categorization age
+desc = train_new['Age'].describe()  # min 0.92 ~ max 80.0
+print(desc)
+print()
+
+
+def categorization_age(age):
+    if age < 10.0:
+        return '0s'
+    elif age < 20.0:
+        return '10s'
+    elif age < 30.0:
+        return '20s'
+    elif age < 40.0:
+        return '30s'
+    elif age < 50.0:
+        return '40s'
+    elif age < 60.0:
+        return '50s'
+    elif age < 70.0:
+        return '60s'
+    elif age < 80.0:
+        return '70s'
+    else:
+        return '80s'
+
+
+train_new['cAge'] = [categorization_age(x) for x in train_new['Age']]
+train_new['cAge']
+ageSum = train_new.groupby('cAge').Survived.sum()
+plt.bar(ageSum.index, ageSum)
+plt.xlabel('Age')
+plt.ylabel('Survived')
+plt.show()
+
+# categorization fare
+newDesc = train_new['Fare'].describe()  # min 0.0 ~ max 512.329200
+print(newDesc)
+print()
+
+
+def categorization_fare(fare):
+    if fare < 50.0:
+        return '0'
+    elif fare < 100.0:
+        return '1'
+    elif fare < 150.0:
+        return '2'
+    elif fare < 200.0:
+        return '3'
+    elif fare < 250.0:
+        return '4'
+    elif fare < 300.0:
+        return '5'
+    else:
+        return '6'
+
+
+train_new['cFare'] = [categorization_fare(x) for x in train_new['Fare']]
+train_new['cFare']
+fareSum = train_new.groupby('cFare').Survived.sum()
+plt.bar(fareSum.index, fareSum)
+plt.xlabel('Fare')
+plt.ylabel('Survived')
+plt.show()
+
+# check missing for each variable
+plt.figure(figsize=(10, 10))
+sb.heatmap(train.isnull(), yticklabels=False, cbar=False)
+plt.show()
+print(train.isnull().sum())  # null information
+
+# based on heatmap and null sum information, 'embarked' has small number null so very likely it won't affect prediction
+# 'age' has 177/891*100=19% of null so we should find a way to fill the gaps
+# 'cabin' has way too many null so we should delete the column
+# people travel alone are more likely to survive(parch, sibsp)
+# female are more likely to survive (sex)
+# 1st class are more likely to survive, then the second, then the third.
+
+# removing unwanted variables
+print(test.isnull().sum())
+train.drop(['Cabin'], axis=1, inplace=True)
+test.drop(['Cabin'], axis=1, inplace=True)
+train.drop(['Ticket'], axis=1, inplace=True)
+test.drop(['Ticket'], axis=1, inplace=True)  # remove both Cabin and Ticket
+
+# fill in embarked
+southampton = train[train["Embarked"] == "S"].shape[0]
+print("Number for Southampton: ")
+print(southampton)
+cherbourg = train[train["Embarked"] == "C"].shape[0]
+print("Number for Cherbourg: ")
+print(cherbourg)
+queenstown = train[train["Embarked"] == "Q"].shape[0]
+print("Number for Queenstown: ")
+print(queenstown)
+train.fillna({'Embarked': 'S'}, inplace=True)  # since overwhelming majority embarked in S, then assign missing to S
+
+# fill in age
+train["Age"] = train["Age"].fillna(-0.5)
+test["Age"] = test["Age"].fillna(-0.5)
+bins = [-1, 0, 5, 12, 18, 24, 35, 60, np.inf]
+labels = ['Unknown', 'Baby', 'Child', 'Teenager', 'Student', 'Young Adult', 'Adult', 'Senior']
+train['AgeGroup'] = pd.cut(train['Age'], bins, labels=labels)
+test['AgeGroup'] = pd.cut(test['Age'], bins, labels=labels)
+combine = [train, test]
+for dataset in combine:
+    dataset['Title'] = dataset.Name.str.extract(' ([A-Za-z]+)\.', expand=False)
+print(pd.crosstab(train['Title'], train['Sex']))
+for dataset in combine:
+    dataset['Title'] = dataset['Title'].replace(['Lady', 'Capt', 'Col',
+                                                 'Don', 'Dr', 'Major', 'Rev', 'Jonkheer', 'Dona'], 'Rare')
+    dataset['Title'] = dataset['Title'].replace(['Countess', 'Sir'], 'Royal')
+    dataset['Title'] = dataset['Title'].replace(['Mlle', 'Ms'], 'Miss')
+    dataset['Title'] = dataset['Title'].replace('Mme', 'Mrs')
+print(train[['Title', 'Survived']].groupby(['Title'], as_index=False).mean())
+title_mapping = {"Mr": 1, "Miss": 2, "Mrs": 3, "Master": 4, "Royal": 5, "Rare": 6}  # map each to a numerical value
+for dataset in combine:
+    dataset['Title'] = dataset['Title'].map(title_mapping)
+    dataset['Title'] = dataset['Title'].fillna(0)
+print(train)
+mr_age = train[train["Title"] == 1]["AgeGroup"].mode()  # Young Adult
+miss_age = train[train["Title"] == 2]["AgeGroup"].mode()  # Student
+mrs_age = train[train["Title"] == 3]["AgeGroup"].mode()  # Adult
+master_age = train[train["Title"] == 4]["AgeGroup"].mode()  # Baby
+royal_age = train[train["Title"] == 5]["AgeGroup"].mode()  # Adult
+rare_age = train[train["Title"] == 6]["AgeGroup"].mode()  # Adult
+age_title_mapping = {1: "Young Adult", 2: "Student", 3: "Adult", 4: "Baby", 5: "Adult", 6: "Adult"}
+for i in range(len(train["AgeGroup"])):
+    if train["AgeGroup"][i] == "Unknown":
+        train["AgeGroup"][i] = age_title_mapping[train["Title"][i]]
+for i in range(len(test["AgeGroup"])):
+    if test["AgeGroup"][i] == "Unknown":
+        test["AgeGroup"][i] = age_title_mapping[test["Title"][i]]
+age_mapping = {'Baby': 1, 'Child': 2, 'Teenager': 3, 'Student': 4, 'Young Adult': 5, 'Adult': 6, 'Senior': 7}
+train['AgeGroup'] = train['AgeGroup'].map(age_mapping)
+test['AgeGroup'] = test['AgeGroup'].map(age_mapping)
+train = train.drop(['Age'], axis=1)
+test = test.drop(['Age'], axis=1)
+
+# drop name
+train.drop(['Name'], axis=1, inplace=True)
+test.drop(['Name'], axis=1, inplace=True)
+
+# map sex
+sex_mapping = {"male": 0, "female": 1}
+train['Sex'] = train['Sex'].map(sex_mapping)
+test['Sex'] = test['Sex'].map(sex_mapping)
+
+# map embarked
+embarked_mapping = {"S": 1, "C": 2, "Q": 3}
+train['Embarked'] = train['Embarked'].map(embarked_mapping)
+test['Embarked'] = test['Embarked'].map(embarked_mapping)
+
+# fill in missing Fare value in test set based on mean fare for that Pclass
+for i in range(len(test["Fare"])):
+    if pd.isnull(test["Fare"][i]):
+        pclass = test["Pclass"][i]
+        test["Fare"][i] = round(train[train["Pclass"] == pclass]["Fare"].mean(), 4)
+# map Fare values into groups of numerical values
+train['FareBand'] = pd.qcut(train['Fare'], 4, labels=[1, 2, 3, 4])
+test['FareBand'] = pd.qcut(test['Fare'], 4, labels=[1, 2, 3, 4])
+train = train.drop(['Fare'], axis=1)
+test = test.drop(['Fare'], axis=1)
+
+# check missing value again
+plt.figure(figsize=(10, 10))
+sb.heatmap(train.isnull(), yticklabels=False, cbar=False)
+plt.show()
+plt.figure(figsize=(10, 10))
+sb.heatmap(test.isnull(), yticklabels=False, cbar=False)
+plt.show()
+
+# splitting
+predictors = train.drop(['Survived', 'PassengerId'], axis=1)
+target = train['Survived']
+x_train, x_val, y_train, y_val = train_test_split(predictors, target, test_size=1, random_state=0)
+
+# Gaussian Naive Bayes
+gaussian = GaussianNB()
+gaussian.fit(x_train, y_train)
+y_pred = gaussian.predict(x_val)
+acc_gaussian = accuracy_score(y_pred, y_val)*100
+print(acc_gaussian)
+
+# Logistic Regression
+logreg = LogisticRegression()
+logreg.fit(x_train, y_train)
+y_pred = logreg.predict(x_val)
+acc_logreg = accuracy_score(y_pred, y_val)*100
+print(acc_logreg)
+
+# Support Vector Machines
+svc = SVC()
+svc.fit(x_train, y_train)
+y_pred = svc.predict(x_val)
+acc_svc = accuracy_score(y_pred, y_val)*100
+print(acc_svc)
+
+# Linear SVC
+linear_svc = LinearSVC()
+linear_svc.fit(x_train, y_train)
+y_pred = linear_svc.predict(x_val)
+acc_linear_svc = accuracy_score(y_pred, y_val)*100
+print(acc_linear_svc)
+
+# Perceptron
+perceptron = Perceptron()
+perceptron.fit(x_train, y_train)
+y_pred = perceptron.predict(x_val)
+acc_perceptron = accuracy_score(y_pred, y_val)*100
+print(acc_perceptron)
+
+# Decision Tree Classifier
+decision_tree = DecisionTreeClassifier()
+decision_tree.fit(x_train, y_train)
+y_pred = decision_tree.predict(x_val)
+acc_decision_tree = accuracy_score(y_pred, y_val)*100
+print(acc_decision_tree)
+
+# Random Forest Classifier
+random_forest = RandomForestClassifier()
+random_forest.fit(x_train, y_train)
+y_pred = random_forest.predict(x_val)
+acc_random_forest = accuracy_score(y_pred, y_val)*100
+print(acc_random_forest)
+
+#kNN or k-Nearest Neighbors
+knn = KNeighborsClassifier()
+knn.fit(x_train, y_train)
+y_pred = knn.predict(x_val)
+acc_knn = accuracy_score(y_pred, y_val)*100
+print(acc_knn)
+
+# Gradient Boosting Classifier
+gbc = GradientBoostingClassifier()
+gbc.fit(x_train, y_train)
+y_pred = gbc.predict(x_val)
+acc_gbc = accuracy_score(y_pred, y_val)*100
+print(acc_gbc)
+
+# AdaBoost Classifier
+ada = AdaBoostClassifier()
+ada.fit(x_train, y_train)
+y_pred = ada.predict(x_val)
+acc_ada = accuracy_score(y_pred, y_val)*100
+print(acc_ada)
+
+# compare accuracy score
+models = pd.DataFrame({
+    'Model': ['Support Vector Machines', 'KNN', 'Logistic Regression',
+              'Random Forest', 'Naive Bayes', 'Perceptron', 'Linear SVC',
+              'Decision Tree', 'Gradient Boosting Classifier', 'AdaBoost Classifier'],
+    'Score': [acc_svc, acc_knn, acc_logreg,
+              acc_random_forest, acc_gaussian, acc_perceptron,acc_linear_svc, acc_decision_tree, acc_gbc, acc_ada]})
+print(models.sort_values(by='Score', ascending=False))
+
+ids = test['PassengerId']
+predictions = ada.predict(test.drop('PassengerId', axis=1))
+
+output = pd.DataFrame({'PassengerId': ids, 'Survived': predictions})
+output.to_csv('C:/Users/horat/Desktop/Project/result.csv', index=False)
